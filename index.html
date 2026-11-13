@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Play Chess</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  
+  body {
+    background-color: #312e2b;
+    color: #fff;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ÜST BAR */
+  .top-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 16px; background-color: #262421;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .top-bar .logo { font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 6px; }
+  .top-bar .icon { color: #9c9894; cursor: pointer; font-size: 24px;}
+
+  /* KOÇ ALANI */
+  .coach-area {
+    display: flex; align-items: center; padding: 12px 16px; gap: 12px;
+    background-color: #2a2825; flex-shrink: 0; z-index: 10;
+  }
+  .avatar-container { position: relative; width: 50px; height: 50px; flex-shrink: 0; }
+  .avatar-img {
+    width: 100%; height: 100%; border-radius: 8px;
+    background: url('https://api.dicebear.com/7.x/bottts/svg?seed=ChessBot&backgroundColor=81b64c') no-repeat center;
+    background-size: cover;
+  }
+  .avatar-level {
+    position: absolute; bottom: -6px; left: -6px;
+    background: #111; border: 1px solid #555;
+    font-size: 10px; padding: 1px 4px; border-radius: 4px; font-weight: bold;
+  }
+  .speech-bubble {
+    background: #fff; color: #000; padding: 10px 14px;
+    border-radius: 8px; border-bottom-left-radius: 0;
+    font-size: 14px; font-weight: 500; line-height: 1.3;
+    flex: 1; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  }
+
+  /* TAHTA ALANI */
+  .board-container {
+    flex: 1; display: flex; justify-content: center; align-items: center;
+    padding: 8px; width: 100%; min-height: 0; 
+  }
+  #board {
+    width: 100%; max-width: 500px; aspect-ratio: 1 / 1;
+    display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
+    border-radius: 4px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    position: relative;
+    touch-action: none; /* Sürüklerken ekranın kaymasını engeller */
+  }
+  .square { position: relative; display: flex; align-items: center; justify-content: center; }
+  .square.light { background-color: #EBECD0; }
+  .square.dark { background-color: #739552; }
+
+  /* Kare Vurguları */
+  .square.last-move::before { content: ''; position: absolute; inset: 0; background: rgba(255, 255, 0, 0.4); }
+  .square.selected::before { content: ''; position: absolute; inset: 0; background: rgba(255, 255, 0, 0.6); }
+  .square.move-target::after {
+    content: ''; position: absolute; width: 30%; height: 30%;
+    border-radius: 50%; background: rgba(0,0,0,0.15);
+  }
+  .square.capture-target::after {
+    content: ''; position: absolute; inset: 4%; border: 6px solid rgba(0,0,0,0.15); border-radius: 50%;
+  }
+
+  /* TAŞLAR */
+  .piece {
+    width: 100%; height: 100%;
+    background-size: contain; background-repeat: no-repeat; background-position: center;
+    position: relative; z-index: 2; cursor: pointer;
+  }
+  
+  /* Sürüklenen Taş (Havadaki) */
+  .dragging-piece {
+    position: fixed !important;
+    z-index: 1000 !important;
+    pointer-events: none; /* Altındaki kareleri görebilmek için */
+    transform: translate(-50%, -50%) scale(1.15);
+    cursor: grabbing;
+    filter: drop-shadow(0 15px 15px rgba(0,0,0,0.6));
+  }
+
+  /* Animasyonlu Uçan Taş (Ghost) */
+  .ghost-piece {
+    position: fixed !important;
+    z-index: 999 !important;
+    pointer-events: none;
+    transition: transform 0.2s ease-in-out; /* 0.2 saniyelik kayma efekti */
+  }
+
+  /* Taş Resimleri (Lichess Kalitesi) */
+  .w-p { background-image: url('https://lichess1.org/assets/piece/cburnett/wP.svg'); }
+  .w-n { background-image: url('https://lichess1.org/assets/piece/cburnett/wN.svg'); }
+  .w-b { background-image: url('https://lichess1.org/assets/piece/cburnett/wB.svg'); }
+  .w-r { background-image: url('https://lichess1.org/assets/piece/cburnett/wR.svg'); }
+  .w-q { background-image: url('https://lichess1.org/assets/piece/cburnett/wQ.svg'); }
+  .w-k { background-image: url('https://lichess1.org/assets/piece/cburnett/wK.svg'); }
+  .b-p { background-image: url('https://lichess1.org/assets/piece/cburnett/bP.svg'); }
+  .b-n { background-image: url('https://lichess1.org/assets/piece/cburnett/bN.svg'); }
+  .b-b { background-image: url('https://lichess1.org/assets/piece/cburnett/bB.svg'); }
+  .b-r { background-image: url('https://lichess1.org/assets/piece/cburnett/bR.svg'); }
+  .b-q { background-image: url('https://lichess1.org/assets/piece/cburnett/bQ.svg'); }
+  .b-k { background-image: url('https://lichess1.org/assets/piece/cburnett/bK.svg'); }
+
+  /* ALT BİLGİ VE MENÜ */
+  .bottom-info {
+    display: flex; justify-content: space-between; padding: 8px 16px;
+    font-size: 13px; font-weight: 600; color: #9c9894; flex-shrink: 0;
+    background-color: #262421;
+  }
+  .bottom-nav {
+    display: flex; justify-content: space-around; align-items: center;
+    padding: 8px 0 16px 0; background-color: #262421; flex-shrink: 0;
+    border-top: 1px solid #3d3a37;
+  }
+  .nav-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    color: #9c9894; font-size: 11px; font-weight: 600; cursor: pointer;
+    background: none; border: none; outline: none; width: 70px;
+  }
+  .nav-btn svg { width: 22px; height: 22px; fill: currentColor; }
+  .nav-btn:active { transform: scale(0.95); color: #fff; }
+
+  /* MODAL */
+  .modal {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+    justify-content: center; align-items: center; z-index: 100; padding: 20px;
+  }
+  .modal-content {
+    background: #262421; border-radius: 8px; padding: 20px;
+    width: 100%; max-width: 300px; text-align: center;
+  }
+  .modal-content h3 { margin-bottom: 15px; color: #fff; font-size: 16px;}
+  .diff-btn {
+    display: block; width: 100%; padding: 12px; margin-bottom: 8px;
+    background: #3d3a37; color: #fff; border: none; border-radius: 4px;
+    font-size: 15px; font-weight: bold; cursor: pointer;
+  }
+  .diff-btn.active { background: #81b64c; }
+  .close-btn { margin-top: 10px; background: transparent; color: #9c9894; border: none; font-size: 14px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<!-- ÜST BAR -->
+<div class="top-bar">
+  <div class="icon">⬅</div>
+  <div class="logo"><span style="color:#81b64c; font-size:22px;">♞</span> Play Chess</div>
+  <div class="icon">⚙️</div>
+</div>
+
+<!-- KOÇ -->
+<div class="coach-area">
+  <div class="avatar-container">
+    <div class="avatar-img"></div>
+    <div class="avatar-level">Bot</div>
+  </div>
+  <div class="speech-bubble" id="coachText">
+    Taşları sürükleyerek veya tıklayarak oynayabilirsin!
+  </div>
+</div>
+
+<!-- TAHTA -->
+<div class="board-container">
+  <div id="board"></div>
+</div>
+
+<!-- ALT BİLGİ VE MENÜ -->
+<div class="bottom-info">
+  <div id="scoreInfo">🤝 Eşit</div>
+  <div id="turnInfo">Sıra: Beyaz</div>
+</div>
+
+<div class="bottom-nav">
+  <button class="nav-btn" id="btnOptions">
+    <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+    Seviye
+  </button>
+  <button class="nav-btn" id="btnResign">
+    <svg viewBox="0 0 24 24"><path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z"/></svg>
+    Terk Et
+  </button>
+  <button class="nav-btn" id="btnHint">
+    <svg viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7zm2.85 11.1l-.85.6V16h-4v-2.3l-.85-.6A4.997 4.997 0 0 1 7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.63-.8 3.16-2.15 4.1z"/></svg>
+    İpucu
+  </button>
+  <button class="nav-btn" id="btnUndo">
+    <svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+    Geri Al
+  </button>
+  <button class="nav-btn" id="btnNew">
+    <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+    Yeni
+  </button>
+</div>
+
+<!-- SEÇENEKLER MODALI -->
+<div class="modal" id="optionsModal">
+  <div class="modal-content">
+    <h3>Zorluk Seviyesi</h3>
+    <button class="diff-btn" data-level="veryEasy">Çok Kolay</button>
+    <button class="diff-btn" data-level="easy">Kolay</button>
+    <button class="diff-btn active" data-level="medium">Orta</button>
+    <button class="diff-btn" data-level="hard">Zor</button>
+    <button class="diff-btn" data-level="veryHard">🔥 Çok Zor</button>
+    <button class="close-btn" id="closeModal">Kapat</button>
+  </div>
+</div>
+
+<script>
+const FILES = ['a','b','c','d','e','f','g','h'];
+let chess = new Chess();
+let playerColor = 'w';
+let difficulty = 'medium';
+let selectedSq = null;
+let legalTargets = [];
+let lastMove = null;
+let thinking = false;
+
+// Animasyon ve Sürükleme Değişkenleri
+let isAnimating = false;
+let dragStartSq = null;
+let dragStartX = 0, dragStartY = 0;
+let isDragging = false;
+
+const boardEl = document.getElementById('board');
+const coachTextEl = document.getElementById('coachText');
+const turnInfoEl = document.getElementById('turnInfo');
+const scoreInfo = document.getElementById('scoreInfo');
+
+// Sesler
+const moveSound = new Audio('https://images.chesscomfiles.com/chess-themes/sounds/_mp3_/default/move-self.mp3');
+const captureSound = new Audio('https://images.chesscomfiles.com/chess-themes/sounds/_mp3_/default/capture.mp3');
+const checkSound = new Audio('https://images.chesscomfiles.com/chess-themes/sounds/_mp3_/default/move-check.mp3');
+
+const LEVELS = {
+  veryEasy: { depth: 1, blunder: 0.40, margin: 400 },
+  easy:     { depth: 1, blunder: 0.15, margin: 160 },
+  medium:   { depth: 2, blunder: 0.05, margin: 60 },
+  hard:     { depth: 3, blunder: 0.00, margin: 0 },
+  veryHard: { depth: 4, blunder: 0.00, margin: 0 }
+};
+
+const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+const PST = {
+  p: [0,0,0,0,0,0,0,0, 50,50,50,50,50,50,50,50, 10,10,20,30,30,20,10,10, 5,5,10,25,25,10,5,5, 0,0,0,20,20,0,0,0, 5,-5,-10,0,0,-10,-5,5, 5,10,10,-20,-20,10,10,5, 0,0,0,0,0,0,0,0],
+  n: [-50,-40,-30,-30,-30,-30,-40,-50, -40,-20,0,0,0,0,-20,-40, -30,0,10,15,15,10,0,-30, -30,5,15,20,20,15,5,-30, -30,0,15,20,20,15,0,-30, -30,5,10,15,15,10,5,-30, -40,-20,0,5,5,0,-20,-40, -50,-40,-30,-30,-30,-30,-40,-50],
+  b: [-20,-10,-10,-10,-10,-10,-10,-20, -10,0,0,0,0,0,0,-10, -10,0,5,10,10,5,0,-10, -10,5,5,10,10,5,5,-10, -10,0,10,10,10,10,0,-10, -10,10,10,10,10,10,10,-10, -10,5,0,0,0,0,5,-10, -20,-10,-10,-10,-10,-10,-10,-20],
+  r: [0,0,0,0,0,0,0,0, 5,10,10,10,10,10,10,5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, 0,0,0,5,5,0,0,0],
+  q: [-20,-10,-10,-5,-5,-10,-10,-20, -10,0,0,0,0,0,0,-10, -10,0,5,5,5,5,0,-10, -5,0,5,5,5,5,0,-5, 0,0,5,5,5,5,0,-5, -10,5,5,5,5,5,0,-10, -10,0,5,0,0,0,0,-10, -20,-10,-10,-5,-5,-10,-10,-20],
+  k: [-30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -20,-30,-30,-40,-40,-30,-30,-20, -10,-20,-20,-20,-20,-20,-20,-10, 20,20,0,0,0,0,20,20, 20,30,10,0,0,10,30,20]
+};
+
+function evaluate(g) {
+  const board = g.board(); let score = 0;
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c]; if (!p) continue;
+      const idx = (p.color === 'w') ? (r * 8 + c) : ((7 - r) * 8 + c);
+      const v = PIECE_VALUES[p.type] + PST[p.type][idx];
+      score += (p.color === 'w') ? v : -v;
+    }
+  }
+  return score;
+}
+
+const MATE = 100000;
+let nodes = 0, aborted = false, searchDeadline = 0;
+
+function moveOrderScore(m) {
+  let s = 0;
+  if (m.captured) s += 10 * PIECE_VALUES[m.captured] - PIECE_VALUES[m.piece];
+  if (m.promotion) s += PIECE_VALUES[m.promotion];
+  if (m.san && m.san.includes('+')) s += 60;
+  return s;
+}
+
+function negamax(g, depth, alpha, beta, ply) {
+  if (aborted) return 0;
+  nodes++;
+  if ((nodes & 1023) === 0 && performance.now() > searchDeadline) { aborted = true; return 0; }
+  if (depth <= 0) return g.turn() === 'w' ? evaluate(g) : -evaluate(g);
+  
+  const moves = g.moves({ verbose: true });
+  if (moves.length === 0) return g.in_check() ? -(MATE - ply) : 0;
+  moves.sort((a, b) => moveOrderScore(b) - moveOrderScore(a));
+
+  let best = -Infinity;
+  for (let i = 0; i < moves.length; i++) {
+    g.move(moves[i]);
+    const val = -negamax(g, depth - 1, -beta, -alpha, ply + 1);
+    g.undo();
+    if (aborted) return 0;
+    if (val > best) best = val;
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+
+function chooseAIMove() {
+  const cfg = LEVELS[difficulty];
+  const moves = chess.moves({ verbose: true });
+  if (moves.length === 0) return null;
+  if (cfg.blunder > 0 && Math.random() < cfg.blunder) return moves[(Math.random() * moves.length) | 0];
+
+  searchDeadline = performance.now() + 2000;
+  let bestMove = moves[0], scored = null;
+  const ordered = moves.slice().sort((a, b) => moveOrderScore(b) - moveOrderScore(a));
+
+  for (let d = 1; d <= cfg.depth; d++) {
+    aborted = false; nodes = 0; const list = [];
+    for (let i = 0; i < ordered.length; i++) {
+      chess.move(ordered[i]);
+      const val = -negamax(chess, d - 1, -Infinity, Infinity, 1);
+      chess.undo();
+      if (aborted) break;
+      list.push({ m: ordered[i], val: val });
+    }
+    if (aborted) break;
+    list.sort((a, b) => b.val - a.val);
+    scored = list; bestMove = list[0].m;
+  }
+  if (scored && cfg.margin > 0) {
+    const bestVal = scored[0].val;
+    const pool = scored.filter(s => s.val >= bestVal - cfg.margin);
+    if (pool.length > 0) return pool[(Math.random() * pool.length) | 0].m;
+  }
+  return bestMove;
+}
+
+/* TAHTA ÇİZİMİ */
+function render() {
+  boardEl.innerHTML = '';
+  for (let i = 0; i < 64; i++) {
+    const row = Math.floor(i / 8), col = i % 8;
+    const rank = 7 - row;
+    const file = col;
+    const sqName = FILES[file] + (rank + 1);
+    const isLight = ((file + rank) % 2) === 0;
+
+    const sqEl = document.createElement('div');
+    sqEl.className = 'square ' + (isLight ? 'light' : 'dark');
+    sqEl.dataset.sq = sqName;
+    
+    if (lastMove && (lastMove.from === sqName || lastMove.to === sqName)) sqEl.classList.add('last-move');
+    if (selectedSq === sqName) sqEl.classList.add('selected');
+    if (legalTargets.includes(sqName)) {
+      sqEl.classList.add(chess.get(sqName) ? 'capture-target' : 'move-target');
+    }
+
+    const piece = chess.get(sqName);
+    if (piece) {
+      const pEl = document.createElement('div');
+      pEl.className = 'piece ' + piece.color + '-' + piece.type;
+      
+      pEl.addEventListener('pointerdown', (e) => onPointerDown(e, sqName));
+      sqEl.appendChild(pEl);
+    }
+
+    sqEl.addEventListener('click', () => {
+      if (!isDragging) onSquareClick(sqName);
+    });
+    
+    boardEl.appendChild(sqEl);
+  }
+}
+
+function playSound(type) {
+  try {
+    if (type === 'move') { moveSound.currentTime = 0; moveSound.play(); }
+    if (type === 'capture') { captureSound.currentTime = 0; captureSound.play(); }
+    if (type === 'check') { checkSound.currentTime = 0; checkSound.play(); }
+  } catch(e) {}
+}
+
+/* SÜRÜKLEME OLAYLARI */
+function onPointerDown(e, sq) {
+  if (thinking || isAnimating || chess.game_over() || chess.turn() !== playerColor) return;
+  const piece = chess.get(sq);
+  if (!piece || piece.color !== playerColor) return;
+
+  dragStartSq = sq;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  isDragging = false;
+}
+
+window.addEventListener('pointermove', (e) => {
+  if (!dragStartSq) return;
+
+  if (!isDragging) {
+    const dx = e.clientX - dragStartX;
+    const dy = e.clientY - dragStartY;
+    if (Math.hypot(dx, dy) > 5) { // 5 piksel kayınca sürükleme başlasın
+      isDragging = true;
+      selectedSq = dragStartSq;
+      legalTargets = chess.moves({ square: dragStartSq, verbose: true }).map(m => m.to);
+      render();
+
+      const sqEl = boardEl.querySelector(`[data-sq="${dragStartSq}"]`);
+      if (sqEl) {
+        const pEl = sqEl.querySelector('.piece');
+        if (pEl) pEl.classList.add('dragging-piece');
+      }
+    }
+  }
+
+  if (isDragging) {
+    const pEl = document.querySelector('.dragging-piece');
+    if (pEl) {
+      pEl.style.left = e.clientX + 'px';
+      pEl.style.top = e.clientY + 'px';
+    }
+  }
+});
+
+window.addEventListener('pointerup', (e) => {
+  if (!dragStartSq) return;
+
+  if (isDragging) {
+    const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+    let targetSq = null;
+    
+    if (dropTarget) {
+      if (dropTarget.classList.contains('square')) targetSq = dropTarget.dataset.sq;
+      else if (dropTarget.classList.contains('piece')) targetSq = dropTarget.parentElement.dataset.sq;
+    }
+
+    if (targetSq && legalTargets.includes(targetSq)) {
+      // Sürükle-bırak ile oynandığında animasyonsuz anında geçiş yap
+      executeMove(dragStartSq, targetSq, false);
+    } else {
+      selectedSq = null; legalTargets = [];
+      render();
+    }
+    
+    setTimeout(() => { isDragging = false; }, 50);
+  }
+
+  dragStartSq = null;
+});
+
+/* ANİMASYON VE HAMLE YAPMA */
+function animatePieceMove(from, to, callback) {
+  const fromSquare = boardEl.querySelector(`[data-sq="${from}"]`);
+  const toSquare = boardEl.querySelector(`[data-sq="${to}"]`);
+  if (!fromSquare || !toSquare) { callback(); return; }
+  
+  const fromPiece = fromSquare.querySelector('.piece');
+  const toPiece = toSquare.querySelector('.piece');
+  
+  if (!fromPiece) { callback(); return; }
+  
+  if (toPiece) toPiece.style.opacity = '0'; // Yenen taşı gizle
+  fromPiece.style.opacity = '0'; // Giden taşı gizle
+
+  const fromRect = fromPiece.getBoundingClientRect();
+  const toRect = toSquare.getBoundingClientRect();
+
+  const ghost = document.createElement('div');
+  ghost.className = fromPiece.className + ' ghost-piece';
+  ghost.style.left = fromRect.left + 'px';
+  ghost.style.top = fromRect.top + 'px';
+  ghost.style.width = fromRect.width + 'px';
+  ghost.style.height = fromRect.height + 'px';
+  
+  document.body.appendChild(ghost);
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      ghost.style.transform = `translate(${toRect.left - fromRect.left}px, ${toRect.top - fromRect.top}px)`;
+    });
+  });
+
+  setTimeout(() => {
+    ghost.remove();
+    callback();
+  }, 200); // 200ms animasyon süresi
+}
+
+function executeMove(from, to, animate = true) {
+  if (isAnimating) return;
+  
+  const isCapture = !!chess.get(to);
+  selectedSq = null; legalTargets = [];
+  
+  const doMove = () => {
+    const move = chess.move({ from, to, promotion: 'q' });
+    if (move) {
+      if (chess.in_check()) playSound('check');
+      else if (isCapture) playSound('capture');
+      else playSound('move');
+      
+      lastMove = move;
+      isAnimating = false;
+      render();
+      updateUI();
+      
+      if (checkGameEnd()) return;
+      
+      thinking = true;
+      setTimeout(aiTurn, 100);
+    } else {
+      isAnimating = false;
+      render();
+    }
+  };
+
+  if (animate) {
+    isAnimating = true;
+    animatePieceMove(from, to, doMove);
+  } else {
+    doMove();
+  }
+}
+
+/* TIKLAYARAK OYNAMA */
+function onSquareClick(sq) {
+  if (thinking || isAnimating || chess.game_over() || chess.turn() !== playerColor) return;
+  if (isDragging) return;
+
+  if (selectedSq && legalTargets.includes(sq)) {
+    executeMove(selectedSq, sq, true); // Tıklayarak oynarken animasyonlu
+    return;
+  }
+
+  const piece = chess.get(sq);
+  if (piece && piece.color === playerColor) {
+    if (selectedSq === sq) {
+      selectedSq = null;
+      legalTargets = [];
+    } else {
+      selectedSq = sq;
+      legalTargets = chess.moves({ square: sq, verbose: true }).map(m => m.to);
+    }
+    render();
+  } else {
+    selectedSq = null; legalTargets = [];
+    render();
+  }
+}
+
+/* BİLGİSAYAR HAMLESİ */
+function aiTurn() {
+  if (chess.game_over()) { thinking = false; return; }
+  const move = chooseAIMove();
+  if (move) {
+    isAnimating = true;
+    const isCapture = !!chess.get(move.to);
+    
+    animatePieceMove(move.from, move.to, () => {
+        chess.move(move);
+        if (chess.in_check()) playSound('check');
+        else if (isCapture) playSound('capture');
+        else playSound('move');
+        
+        lastMove = move;
+        isAnimating = false;
+        thinking = false;
+        selectedSq = null; legalTargets = [];
+        render(); updateUI(); checkGameEnd();
+    });
+  } else {
+    thinking = false;
+  }
+}
+
+function updateUI() {
+  turnInfoEl.textContent = 'Sıra: ' + (chess.turn() === 'w' ? 'Beyaz' : 'Siyah');
+  
+  let score = evaluate(chess);
+  if (score === 0) scoreInfo.textContent = '🤝 Eşit';
+  else if (score > 0) scoreInfo.textContent = `👑 +${Math.round(score/100)}`;
+  else scoreInfo.textContent = `👑 -${Math.round(Math.abs(score)/100)}`;
+
+  updateCoach();
+}
+
+function updateCoach() {
+  if (chess.game_over() || chess.turn() !== playerColor) return;
+  const moves = chess.moves({ verbose: true });
+  if (moves.length === 0) return;
+
+  if (chess.in_check()) {
+    coachTextEl.innerHTML = '<b>Şahın tehdit altında!</b> Şahı güvenli bir yere götür.';
+    return;
+  }
+
+  const tips = [
+    'Merkezi kontrol etmeye çalış.',
+    'At ve fillerini geliştir, şahını koru.',
+    'Korumasız taş bırakmamaya dikkat et.',
+    'Açık sütunlara kalelerini yerleştir.',
+    'Taşların birbirini korusun.'
+  ];
+  coachTextEl.innerHTML = tips[Math.floor(Math.random() * tips.length)];
+}
+
+function checkGameEnd() {
+  if (chess.in_checkmate()) {
+    if (chess.turn() === playerColor) coachTextEl.innerHTML = '<b>Mat! Kaybettin.</b> Bir dahaki sefere daha iyi olacak.';
+    else coachTextEl.innerHTML = '<b>Mat! Tebrikler, kazandın!</b> 🎉';
+    return true;
+  }
+  if (chess.in_draw() || chess.in_stalemate() || chess.insufficient_material()) {
+    coachTextEl.innerHTML = '<b>Oyun berabere bitti.</b>';
+    return true;
+  }
+  return false;
+}
+
+document.getElementById('btnNew').addEventListener('click', () => {
+  if (isAnimating) return;
+  chess = new Chess();
+  lastMove = null; selectedSq = null; legalTargets = [];
+  render(); updateUI();
+  coachTextEl.innerHTML = 'Yeni oyun başladı. Hadi göster kendini!';
+});
+
+document.getElementById('btnUndo').addEventListener('click', () => {
+  if (thinking || isAnimating || chess.history().length === 0) return;
+  chess.undo(); if (chess.turn() !== playerColor && chess.history().length > 0) chess.undo();
+  const h = chess.history({ verbose: true });
+  lastMove = h.length > 0 ? h[h.length - 1] : null;
+  selectedSq = null; legalTargets = [];
+  render(); updateUI();
+});
+
+document.getElementById('btnHint').addEventListener('click', () => {
+  if (thinking || isAnimating || chess.game_over() || chess.turn() !== playerColor) return;
+  coachTextEl.innerHTML = 'İpucu düşünülüyor...';
+  setTimeout(() => {
+    const saved = difficulty; difficulty = 'hard';
+    const best = chooseAIMove(); difficulty = saved;
+    if (best) {
+      coachTextEl.innerHTML = `Şu hamleyi dene: <b>${best.san}</b>`;
+    }
+  }, 50);
+});
+
+document.getElementById('btnResign').addEventListener('click', () => {
+  if (chess.game_over() || isAnimating) return;
+  chess.reset();
+  coachTextEl.innerHTML = 'Oyundan çekildin. Yeni oyun için "Yeni"ye bas.';
+  render(); updateUI();
+});
+
+const modal = document.getElementById('optionsModal');
+document.getElementById('btnOptions').addEventListener('click', () => modal.style.display = 'flex');
+document.getElementById('closeModal').addEventListener('click', () => modal.style.display = 'none');
+
+document.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    difficulty = e.target.dataset.level;
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    modal.style.display = 'none';
+    coachTextEl.innerHTML = 'Zorluk seviyesi değiştirildi.';
+  });
+});
+
+render(); updateUI();
+</script>
+</body>
+  </html>
